@@ -1,5 +1,7 @@
 # ✒️ COLOR-PANEL AI: Manga Colorizer
 
+🚀 **[Live Demo](https://mdsium003.github.io/manga-colorizer/)**
+
 ![Manga Colorizer Preview](https://images.unsplash.com/photo-1601039727490-458d3e7f2799?q=80&w=1000&auto=format&fit=crop)
 
 **COLOR-PANEL AI** is a professional-grade, high-performance web application designed for interactive manga lineart colorization. It uses Edge-ML technology to colorize grayscale panels directly in your browser without uploading your art to a server.

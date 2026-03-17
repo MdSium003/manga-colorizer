@@ -111,7 +111,7 @@ function App() {
     workerRef.current.postMessage({ 
       imageData: imageData, 
       hints: hints,
-      modelPath: '/anime-model.onnx' 
+      modelPath: 'anime-model.onnx' // Removed leading slash for GitHub Pages compatibility
     });
   };
 
