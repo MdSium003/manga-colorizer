@@ -1,13 +1,51 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Suspense } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { Float, MeshDistortMaterial, Sphere, PerspectiveCamera } from '@react-three/drei';
 import './App.css';
+
+// --- 3D Anime Background Elements ---
+function AnimeShapes() {
+  return (
+    <>
+      <ambientLight intensity={0.5} />
+      <pointLight position={[10, 10, 10]} intensity={1} color="#c084fc" />
+      <pointLight position={[-10, -10, -10]} intensity={0.5} color="#6366f1" />
+      
+      <Float speed={2} rotationIntensity={1} floatIntensity={2}>
+        <Sphere args={[1, 64, 64]} position={[4, 2, -5]} scale={1.5}>
+          <MeshDistortMaterial
+            color="#c084fc"
+            speed={3}
+            distort={0.4}
+            radius={1}
+          />
+        </Sphere>
+      </Float>
+
+      <Float speed={3} rotationIntensity={2} floatIntensity={1}>
+        <mesh position={[-5, -2, -8]} rotation={[45, 45, 45]}>
+          <boxGeometry args={[1.5, 1.5, 1.5]} />
+          <meshStandardMaterial color="#f472b6" wireframe />
+        </mesh>
+      </Float>
+
+      <Float speed={1.5} rotationIntensity={0.5} floatIntensity={3}>
+        <mesh position={[0, -4, -10]}>
+          <torusGeometry args={[3, 0.5, 16, 100]} />
+          <meshStandardMaterial color="#6366f1" opacity={0.3} transparent />
+        </mesh>
+      </Float>
+    </>
+  );
+}
 
 function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [imageSrc, setImageSrc] = useState(null);
-  const [colorizedSrc, setColorizedSrc] = useState(null); // The AI result as a dataURL
-  const [selectedColor, setSelectedColor] = useState('#ff00b7'); // Neon manga accent
+  const [colorizedSrc, setColorizedSrc] = useState(null);
+  const [selectedColor, setSelectedColor] = useState('#ff00b7');
   const [hints, setHints] = useState([]);
-  const [imgMetrics, setImgMetrics] = useState(null); // { offsetX, offsetY, newWidth, newHeight }
+  const [imgMetrics, setImgMetrics] = useState(null);
   
   const workerRef = useRef(null);
   const cleanCanvasRef = useRef(null);
@@ -48,7 +86,6 @@ function App() {
         setImgMetrics({ offsetX, offsetY, newWidth, newHeight });
         ctx.drawImage(img, offsetX, offsetY, newWidth, newHeight); 
       });
-      // Clear previous result
       setColorizedSrc(null);
     };
     img.src = imgSrc;
@@ -108,7 +145,6 @@ function App() {
     const ctx = cleanCanvasRef.current.getContext('2d');
     const imageData = ctx.getImageData(0, 0, 512, 512);
 
-    // Ensure the base path has a trailing slash for correct relative URL construction
     const basePath = window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/';
     const modelUrl = window.location.origin + basePath + 'anime-model.onnx';
 
@@ -125,132 +161,155 @@ function App() {
     canvas.height = height;
     const ctx = canvas.getContext('2d');
 
-    // 1. Paint AI colors
     const newImageData = new ImageData(pixelArray, width, height);
     ctx.putImageData(newImageData, 0, 0);
 
-    // 2. Multiply lines
     ctx.globalCompositeOperation = 'multiply';
     ctx.drawImage(cleanCanvasRef.current, 0, 0, width, height);
     ctx.globalCompositeOperation = 'source-over';
 
-    // 3. (Optional but better) Clear the areas outside the image bounds to white or black to remove artifacts
     if (imgMetrics) {
       const { offsetX, offsetY, newWidth, newHeight } = imgMetrics;
       ctx.fillStyle = "white";
-      // Top
       if (offsetY > 0) ctx.fillRect(0, 0, width, offsetY);
-      // Bottom
       if (offsetY + newHeight < height) ctx.fillRect(0, offsetY + newHeight, width, height - (offsetY + newHeight));
-      // Left
       if (offsetX > 0) ctx.fillRect(0, 0, offsetX, height);
-      // Right
       if (offsetX + newWidth < width) ctx.fillRect(offsetX + newWidth, 0, width - (offsetX + newWidth), height);
     }
 
-    // 4. Store result as URL for the slider
     setColorizedSrc(canvas.toDataURL());
   };
 
   return (
-    <div className="container">
-      {/* Decorative Manga SFX */}
-      <div className="sfx sfx-1">BOOM</div>
-      <div className="sfx sfx-2">DOKAN</div>
+    <>
+      <div className="three-bg">
+        <Canvas>
+          <PerspectiveCamera makeDefault position={[0, 0, 10]} />
+          <Suspense fallback={null}>
+            <AnimeShapes />
+          </Suspense>
+        </Canvas>
+      </div>
 
-      <header className="header animate-in">
-        <div className="logo">
-          <span className="logo-icon">✒️</span>
-          <h1 className="gradient-text">COLOR-PANEL AI</h1>
-        </div>
-        <p className="subtitle">Manga Studio Grade Interactive Colorizer</p>
-      </header>
+      <div className="container">
+        <div className="sfx sfx-1">BOOM</div>
+        <div className="sfx sfx-2">DOKAN</div>
 
-      <main className="main-content">
-        <section className="controls-panel card animate-in" style={{ animationDelay: '0.1s' }}>
-          <div className="upload-section">
-            <label className="upload-label">
-              <span>{imageSrc ? 'REPLACE ARTWORK' : 'UPLOAD LINEART (INKED)'}</span>
-              <input type="file" accept="image/png, image/jpeg" onChange={handleImageUpload} />
-            </label>
+        <header className="header animate-in">
+          <div className="logo">
+            <span className="logo-icon">✒️</span>
+            <h1 className="gradient-text">COLOR-PANEL AI</h1>
           </div>
+          <p className="subtitle">Manga Studio Grade Interactive Colorizer</p>
+        </header>
 
-          <div className="tools-grid">
-            <div className="tool-item">
-              <label>INK MARKER</label>
-              <div className="color-picker-wrapper">
-                <input 
-                  type="color" 
-                  value={selectedColor} 
-                  onChange={(e) => setSelectedColor(e.target.value)} 
+        <main className="main-content">
+          <section className="controls-panel card animate-in" style={{ animationDelay: '0.1s' }}>
+            <div className="upload-section">
+              <label className="upload-label">
+                <span>{imageSrc ? 'REPLACE ARTWORK' : 'UPLOAD LINEART (INKED)'}</span>
+                <input type="file" accept="image/png, image/jpeg" onChange={handleImageUpload} />
+              </label>
+            </div>
+
+            <div className="tools-grid">
+              <div className="tool-item">
+                <label>INK MARKER</label>
+                <div className="color-picker-wrapper">
+                  <input 
+                    type="color" 
+                    value={selectedColor} 
+                    onChange={(e) => setSelectedColor(e.target.value)} 
+                  />
+                  <span className="color-value">{selectedColor}</span>
+                </div>
+              </div>
+
+              <div className="tool-actions">
+                <button className="btn-secondary" onClick={handleClearHints} disabled={hints.length === 0}>
+                  RESET PAGE
+                </button>
+                <button 
+                  className="btn-primary" 
+                  onClick={handleColorize} 
+                  disabled={isProcessing || !imageSrc}
+                >
+                  {isProcessing ? <span className="loader"></span> : 'COLORIZE PANEL'}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section className="workspace animate-in" style={{ animationDelay: '0.2s' }}>
+            <div className="canvas-wrapper">
+              <div className="canvas-header">
+                <h3>DRAFT & HINTS</h3>
+                {hints.length > 0 && <span className="badge">{hints.length} POINTS</span>}
+              </div>
+              <div className="canvas-container">
+                <canvas ref={cleanCanvasRef} style={{ display: 'none' }} /> 
+                <canvas 
+                  ref={displayCanvasRef} 
+                  onClick={handleCanvasClick}
+                  className={!imageSrc ? 'empty' : ''}
                 />
-                <span className="color-value">{selectedColor}</span>
+                {!imageSrc && (
+                  <div className="placeholder">
+                    <p>FEED THE AI INKED ART</p>
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="tool-actions">
-              <button className="btn-secondary" onClick={handleClearHints} disabled={hints.length === 0}>
-                RESET PAGE
-              </button>
-              <button 
-                className="btn-primary" 
-                onClick={handleColorize} 
-                disabled={isProcessing || !imageSrc}
-              >
-                {isProcessing ? <span className="loader"></span> : 'COLORIZE PANEL'}
-              </button>
+            <div className="canvas-wrapper">
+              <div className="canvas-header">
+                <h3>FINAL RENDER</h3>
+              </div>
+              <div className="canvas-container card">
+                <canvas 
+                  ref={resultCanvasRef} 
+                  className={!imageSrc ? 'empty' : ''} 
+                  style={{ display: imageSrc ? 'block' : 'none' }}
+                />
+                {!imageSrc && (
+                  <div className="placeholder">
+                    <p>AWAITING AI ENGINE...</p>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <section className="workspace animate-in" style={{ animationDelay: '0.2s' }}>
-          {/* Input Panel */}
-          <div className="canvas-wrapper">
-            <div className="canvas-header">
-              <h3>DRAFT & HINTS</h3>
-              {hints.length > 0 && <span className="badge">{hints.length} POINTS</span>}
-            </div>
-            <div className="canvas-container">
-              <canvas ref={cleanCanvasRef} style={{ display: 'none' }} /> 
-              <canvas 
-                ref={displayCanvasRef} 
-                onClick={handleCanvasClick}
-                className={!imageSrc ? 'empty' : ''}
-              />
-              {!imageSrc && (
-                <div className="placeholder">
-                  <p>FEED THE AI INKED ART</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Result Panel with Slider */}
-          <div className="canvas-wrapper">
-            <div className="canvas-header">
-              <h3>FINAL RENDER</h3>
+          <section className="info-section animate-in" style={{ animationDelay: '0.3s' }}>
+            <div className="info-card card">
+              <h3>Direct-to-Browser AI</h3>
+              <p>
+                Our engine uses <strong>ONNX Runtime Web</strong> to run high-speed neural network inference directly in your browser. 
+                Instead of sending your private artwork to a remote server, your device's <strong>GPU (via WebGPU)</strong> or CPU calculates the colors locally.
+              </p>
+              <div style={{ marginTop: '15px' }}>
+                <span className="tech-tag">React 19</span>
+                <span className="tech-tag">Vite</span>
+                <span className="tech-tag">ONNX Runtime</span>
+                <span className="tech-tag">Three.js</span>
+              </div>
             </div>
             
-            <div className="canvas-container card">
-              <canvas 
-                ref={resultCanvasRef} 
-                className={!imageSrc ? 'empty' : ''} 
-                style={{ display: imageSrc ? 'block' : 'none' }}
-              />
-              {!imageSrc && (
-                <div className="placeholder">
-                  <p>AWAITING AI ENGINE...</p>
-                </div>
-              )}
+            <div className="warning-card card">
+              <h4>⚠️ Artist Notice</h4>
+              <p style={{ fontSize: '0.9rem', opacity: 0.8 }}>
+                This model is a research prototype. Results may vary significantly based on your line weight. 
+                Don't be shocked if colors aren't perfect yet—it's still learning the nuances of different art styles!
+              </p>
             </div>
-          </div>
-        </section>
-      </main>
+          </section>
+        </main>
 
-      <footer className="footer animate-in">
-        <p>MANGA-MIND ENGINE v2.0 // POWERED BY EDGE-ONNX</p>
-      </footer>
-    </div>
+        <footer className="footer animate-in">
+          <p>MANGA-MIND ENGINE v2.0 // POWERED BY EDGE-ONNX</p>
+        </footer>
+      </div>
+    </>
   );
 }
 

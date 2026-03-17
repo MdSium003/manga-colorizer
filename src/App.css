@@ -5,6 +5,8 @@
   display: flex;
   flex-direction: column;
   gap: 40px;
+  position: relative;
+  z-index: 1; /* Stay above 3D background */
 }
 
 .header {
@@ -268,6 +270,57 @@
   to { transform: rotate(360deg); }
 }
 
+/* 3D Background Container */
+.three-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* Info & Warning Panels */
+.info-section {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.warning-card {
+  border-left: 4px solid var(--accent) !important;
+  background: rgba(244, 114, 182, 0.05) !important;
+}
+
+.warning-card h4 {
+  color: var(--accent) !important;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-card h3 {
+  color: var(--primary);
+  margin-bottom: 12px;
+}
+
+.tech-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  margin-right: 8px;
+  margin-bottom: 8px;
+  color: #94a3b8;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 600;
+}
+
 /* Decorative SFX */
 .sfx {
   position: absolute;
@@ -306,5 +359,52 @@
 @media (max-width: 900px) {
   .workspace {
     grid-template-columns: 1fr;
+  }
+  
+  .controls-panel {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 20px;
+  }
+  
+  .tools-grid {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .logo h1 {
+    font-size: 2.2rem;
+  }
+  
+  .info-section {
+    grid-template-columns: 1fr;
+  }
+
+  .sfx {
+    font-size: 4rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .container {
+    padding: 20px 10px;
+    gap: 20px;
+  }
+  
+  .card {
+    padding: 16px;
+  }
+  
+  .btn-primary, .btn-secondary {
+    width: 100%;
+    padding: 12px;
+  }
+  
+  .tool-actions {
+    flex-direction: column;
+  }
+
+  .logo-icon {
+    font-size: 2rem;
   }
 }
