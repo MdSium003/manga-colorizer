@@ -7,7 +7,12 @@ self.onmessage = async (event) => {
     const { imageData, hints, modelPath } = event.data;
 
     try {
-        const session = await ort.InferenceSession.create(modelPath, { executionProviders: ['wasm'] });
+        // We tell it to try WebGPU first. If the user's browser is old and doesn't support it, 
+        // it safely falls back to WASM (CPU).
+        const session = await ort.InferenceSession.create(modelPath, { 
+            executionProviders: ['webgpu', 'wasm'] 
+        });
+
         const tensor512 = preprocess(imageData);
 
         const feeds = {};
@@ -28,14 +33,20 @@ self.onmessage = async (event) => {
                     const px = Math.floor(hint.x / 4);
                     const py = Math.floor(hint.y / 4);
 
-                    // NO MORE 3x3 LOOP. We use a precise single pixel!
-                    if (px >= 0 && px < 128 && py >= 0 && py < 128) {
-                        const idx = py * 128 + px; // Calculate 1D array index
-                        
-                        hintData[idx] = hint.r / 255.0;                   // Red Channel
-                        hintData[idx + size128] = hint.g / 255.0;         // Green Channel
-                        hintData[idx + 2 * size128] = hint.b / 255.0;     // Blue Channel
-                        hintData[idx + 3 * size128] = 1.0;                // Alpha Mask
+                    // --- FIX: USE A 3x3 BLOCK FOR STRONGER HINT INFLUENCE ---
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            const npx = px + dx;
+                            const npy = py + dy;
+
+                            if (npx >= 0 && npx < 128 && npy >= 0 && npy < 128) {
+                                const idx = npy * 128 + npx;
+                                hintData[idx] = hint.r / 255.0;                   // Red
+                                hintData[idx + size128] = hint.g / 255.0;         // Green
+                                hintData[idx + 2 * size128] = hint.b / 255.0;     // Blue
+                                hintData[idx + 3 * size128] = 1.0;                // Alpha Mask
+                            }
+                        }
                     }
                 });
 
@@ -69,7 +80,18 @@ function preprocess(imageData) {
 
     for (let i = 0; i < width * height; i++) {
         // Grab Red channel and convert 0-255 to 0.0-1.0
-        float32Data[i] = data[i * 4] / 255.0;
+        let val = data[i * 4] / 255.0;
+
+        // --- FIX: LINEART HARDENING ---
+        // Boost contrast: make near-whites pure white and near-blacks pure black
+        if (val > 0.8) val = 1.0;
+        else if (val < 0.2) val = 0.0;
+        else {
+            // Apply a simple sigmoid-like contrast curve for the middle values
+            val = (val - 0.2) / 0.6; 
+        }
+
+        float32Data[i] = val;
     }
 
     // Shape is [1, 1, 512, 512]
@@ -94,4 +116,4 @@ function postprocess(tensor) {
     }
 
     return rgbaPixels;
-}
+}

@@ -1,14 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
+import './App.css';
 
 function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [imageSrc, setImageSrc] = useState(null);
-  const [selectedColor, setSelectedColor] = useState('#ff0000'); // Default to red
-  const [hints, setHints] = useState([]); 
+  const [colorizedSrc, setColorizedSrc] = useState(null); // The AI result as a dataURL
+  const [selectedColor, setSelectedColor] = useState('#ff00b7'); // Neon manga accent
+  const [hints, setHints] = useState([]);
+  const [imgMetrics, setImgMetrics] = useState(null); // { offsetX, offsetY, newWidth, newHeight }
   
   const workerRef = useRef(null);
-  const cleanCanvasRef = useRef(null);   // Hidden: Pure lineart for ML & Multiply trick
-  const displayCanvasRef = useRef(null); // Visible: Where user clicks and sees dots
+  const cleanCanvasRef = useRef(null);
+  const displayCanvasRef = useRef(null);
   const resultCanvasRef = useRef(null);
 
   useEffect(() => {
@@ -18,7 +21,7 @@ function App() {
       if (event.data.success) {
         paintResultToCanvas(event.data.pixels, event.data.width, event.data.height);
       } else {
-        alert(`Failed to colorize: ${event.data.error}`);
+        console.error(`ML Error: ${event.data.error}`);
       }
       setIsProcessing(false);
     };
@@ -42,8 +45,11 @@ function App() {
         const offsetX = (512 - newWidth) / 2;  
         const offsetY = (512 - newHeight) / 2; 
 
+        setImgMetrics({ offsetX, offsetY, newWidth, newHeight });
         ctx.drawImage(img, offsetX, offsetY, newWidth, newHeight); 
       });
+      // Clear previous result
+      setColorizedSrc(null);
     };
     img.src = imgSrc;
   };
@@ -55,19 +61,17 @@ function App() {
     const reader = new FileReader();
     reader.onload = (event) => {
       setImageSrc(event.target.result);
-      setHints([]); // Clear old hints
+      setHints([]);
       drawImageToCanvases(event.target.result);
     };
     reader.readAsDataURL(file);
   };
 
-  // Convert Hex string to RGB numbers for the AI
   const hexToRgb = (hex) => {
     const bigint = parseInt(hex.slice(1), 16);
     return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
   };
 
-  // Handle clicking the canvas to drop a color hint
   const handleCanvasClick = (e) => {
     if (!imageSrc) return;
     
@@ -82,30 +86,31 @@ function App() {
     const rgb = hexToRgb(selectedColor);
     setHints(prev => [...prev, { x, y, r: rgb.r, g: rgb.g, b: rgb.b }]);
     
-    // Visually draw the dot on the display canvas
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = selectedColor;
     ctx.beginPath();
-    ctx.arc(x, y, 6, 0, 2 * Math.PI); // 6px radius dot
+    ctx.arc(x, y, 6, 0, 2 * Math.PI);
     ctx.fill();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.stroke();
   };
 
   const handleClearHints = () => {
     setHints([]);
-    if (imageSrc) drawImageToCanvases(imageSrc); // Redraw clean image
+    if (imageSrc) drawImageToCanvases(imageSrc);
   };
 
   const handleColorize = () => {
     if (!imageSrc) return;
     setIsProcessing(true);
     
-    // We grab the pixels from the CLEAN canvas so the AI doesn't see our UI dots as part of the lineart
     const ctx = cleanCanvasRef.current.getContext('2d');
     const imageData = ctx.getImageData(0, 0, 512, 512);
 
     workerRef.current.postMessage({ 
       imageData: imageData, 
-      hints: hints, // Pass the array of clicks to the Web Worker!
+      hints: hints,
       modelPath: '/anime-model.onnx' 
     });
   };
@@ -116,60 +121,131 @@ function App() {
     canvas.height = height;
     const ctx = canvas.getContext('2d');
 
-    // 1. Paint the AI colors
+    // 1. Paint AI colors
     const newImageData = new ImageData(pixelArray, width, height);
     ctx.putImageData(newImageData, 0, 0);
 
-    // 2. The Pro Trick: Multiply the clean, sharp black lines back over the colors!
+    // 2. Multiply lines
     ctx.globalCompositeOperation = 'multiply';
     ctx.drawImage(cleanCanvasRef.current, 0, 0, width, height);
-    ctx.globalCompositeOperation = 'source-over'; 
+    ctx.globalCompositeOperation = 'source-over';
+
+    // 3. (Optional but better) Clear the areas outside the image bounds to white or black to remove artifacts
+    if (imgMetrics) {
+      const { offsetX, offsetY, newWidth, newHeight } = imgMetrics;
+      ctx.fillStyle = "white";
+      // Top
+      if (offsetY > 0) ctx.fillRect(0, 0, width, offsetY);
+      // Bottom
+      if (offsetY + newHeight < height) ctx.fillRect(0, offsetY + newHeight, width, height - (offsetY + newHeight));
+      // Left
+      if (offsetX > 0) ctx.fillRect(0, 0, offsetX, height);
+      // Right
+      if (offsetX + newWidth < width) ctx.fillRect(offsetX + newWidth, 0, width - (offsetX + newWidth), height);
+    }
+
+    // 4. Store result as URL for the slider
+    setColorizedSrc(canvas.toDataURL());
   };
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
-      <h1>Edge ML Interactive Manga Colorizer</h1>
-      
-      <div style={{ marginBottom: '20px', display: 'flex', gap: '15px', alignItems: 'center' }}>
-        <input type="file" accept="image/png, image/jpeg" onChange={handleImageUpload} />
-        
-        {/* The New Color Picker Toolbar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', paddingLeft: '20px', borderLeft: '2px solid #ccc' }}>
-          <label><strong>Hint Color:</strong></label>
-          <input 
-            type="color" 
-            value={selectedColor} 
-            onChange={(e) => setSelectedColor(e.target.value)} 
-            style={{ cursor: 'pointer', height: '30px', width: '40px' }}
-          />
-          <button onClick={handleClearHints} disabled={hints.length === 0}>Clear Hints</button>
-        </div>
+    <div className="container">
+      {/* Decorative Manga SFX */}
+      <div className="sfx sfx-1">BOOM</div>
+      <div className="sfx sfx-2">DOKAN</div>
 
-        <button 
-          onClick={handleColorize} 
-          disabled={isProcessing || !imageSrc}
-          style={{ padding: '8px 16px', fontWeight: 'bold' }}
-        >
-          {isProcessing ? 'Processing AI...' : 'Colorize Manga'}
-        </button>
-      </div>
-
-      <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-        <div>
-          <h3>Click to add colors!</h3>
-          <canvas ref={cleanCanvasRef} style={{ display: 'none' }} /> 
-          <canvas 
-            ref={displayCanvasRef} 
-            onClick={handleCanvasClick}
-            style={{ maxWidth: '400px', border: '2px solid #333', cursor: 'crosshair', boxShadow: '2px 2px 10px rgba(0,0,0,0.2)' }} 
-          />
+      <header className="header animate-in">
+        <div className="logo">
+          <span className="logo-icon">✒️</span>
+          <h1 className="gradient-text">COLOR-PANEL AI</h1>
         </div>
+        <p className="subtitle">Manga Studio Grade Interactive Colorizer</p>
+      </header>
 
-        <div>
-          <h3>Result</h3>
-          <canvas ref={resultCanvasRef} style={{ maxWidth: '400px', border: '1px solid black' }} />
-        </div>
-      </div>
+      <main className="main-content">
+        <section className="controls-panel card animate-in" style={{ animationDelay: '0.1s' }}>
+          <div className="upload-section">
+            <label className="upload-label">
+              <span>{imageSrc ? 'REPLACE ARTWORK' : 'UPLOAD LINEART (INKED)'}</span>
+              <input type="file" accept="image/png, image/jpeg" onChange={handleImageUpload} />
+            </label>
+          </div>
+
+          <div className="tools-grid">
+            <div className="tool-item">
+              <label>INK MARKER</label>
+              <div className="color-picker-wrapper">
+                <input 
+                  type="color" 
+                  value={selectedColor} 
+                  onChange={(e) => setSelectedColor(e.target.value)} 
+                />
+                <span className="color-value">{selectedColor}</span>
+              </div>
+            </div>
+
+            <div className="tool-actions">
+              <button className="btn-secondary" onClick={handleClearHints} disabled={hints.length === 0}>
+                RESET PAGE
+              </button>
+              <button 
+                className="btn-primary" 
+                onClick={handleColorize} 
+                disabled={isProcessing || !imageSrc}
+              >
+                {isProcessing ? <span className="loader"></span> : 'COLORIZE PANEL'}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="workspace animate-in" style={{ animationDelay: '0.2s' }}>
+          {/* Input Panel */}
+          <div className="canvas-wrapper">
+            <div className="canvas-header">
+              <h3>DRAFT & HINTS</h3>
+              {hints.length > 0 && <span className="badge">{hints.length} POINTS</span>}
+            </div>
+            <div className="canvas-container">
+              <canvas ref={cleanCanvasRef} style={{ display: 'none' }} /> 
+              <canvas 
+                ref={displayCanvasRef} 
+                onClick={handleCanvasClick}
+                className={!imageSrc ? 'empty' : ''}
+              />
+              {!imageSrc && (
+                <div className="placeholder">
+                  <p>FEED THE AI INKED ART</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Result Panel with Slider */}
+          <div className="canvas-wrapper">
+            <div className="canvas-header">
+              <h3>FINAL RENDER</h3>
+            </div>
+            
+            <div className="canvas-container card">
+              <canvas 
+                ref={resultCanvasRef} 
+                className={!imageSrc ? 'empty' : ''} 
+                style={{ display: imageSrc ? 'block' : 'none' }}
+              />
+              {!imageSrc && (
+                <div className="placeholder">
+                  <p>AWAITING AI ENGINE...</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer className="footer animate-in">
+        <p>MANGA-MIND ENGINE v2.0 // POWERED BY EDGE-ONNX</p>
+      </footer>
     </div>
   );
 }

@@ -6,7 +6,6 @@ export default function PublishPanel({ originalFile, colorizedFile, user }) {
   const [statusMessage, setStatusMessage] = useState('');
 
   const handlePublish = async () => {
-    // 1. Basic validation
     if (!originalFile || !colorizedFile) {
       setStatusMessage('Error: Missing images to publish.');
       return;
@@ -20,19 +19,16 @@ export default function PublishPanel({ originalFile, colorizedFile, user }) {
     setStatusMessage('Uploading images to storage...');
 
     try {
-      // Create unique filenames to prevent overwriting
       const timestamp = Date.now();
       const origFileName = `public/${user.id}/orig_${timestamp}.png`;
       const colorFileName = `public/${user.id}/color_${timestamp}.png`;
 
-      // 2. Upload Original Image to Supabase Storage
       const { data: origData, error: origError } = await supabase.storage
         .from('manga-images')
         .upload(origFileName, originalFile);
 
       if (origError) throw origError;
 
-      // 3. Upload Colorized Image to Supabase Storage
       const { data: colorData, error: colorError } = await supabase.storage
         .from('manga-images')
         .upload(colorFileName, colorizedFile);
@@ -41,8 +37,6 @@ export default function PublishPanel({ originalFile, colorizedFile, user }) {
 
       setStatusMessage('Saving to database...');
 
-      // 4. Insert the record into the PostgreSQL database
-      // RLS (Row Level Security) will automatically verify the user_id matches the logged-in user
       const { error: dbError } = await supabase
         .from('generations')
         .insert([
@@ -50,7 +44,7 @@ export default function PublishPanel({ originalFile, colorizedFile, user }) {
             user_id: user.id,
             original_url: origData.path,
             colorized_url: colorData.path,
-            prompt: "Auto-colorized using Edge ML" // Optional: if you add text prompts later
+            prompt: "Auto-colorized using MangaMind AI"
           }
         ]);
 
@@ -67,19 +61,21 @@ export default function PublishPanel({ originalFile, colorizedFile, user }) {
   };
 
   return (
-    <div style={{ padding: '20px', border: '1px solid #ccc', borderRadius: '8px', maxWidth: '400px' }}>
-      <h3>Publish Your Colorization</h3>
+    <div className="card publish-panel">
+      <h3>Gallery Submission</h3>
+      <p className="tool-description">Share your creation with the community.</p>
       
       <button 
+        className="btn-primary"
         onClick={handlePublish} 
-        disabled={isPublishing}
-        style={{ padding: '10px 20px', cursor: isPublishing ? 'not-allowed' : 'pointer' }}
+        disabled={isPublishing || !originalFile}
+        style={{ width: '100%', marginTop: '16px' }}
       >
-        {isPublishing ? 'Publishing...' : 'Publish to Gallery'}
+        {isPublishing ? <span className="loader"></span> : 'Publish to Gallery'}
       </button>
 
       {statusMessage && (
-        <p style={{ marginTop: '15px', fontWeight: 'bold' }}>
+        <p className="status-message animate-in">
           {statusMessage}
         </p>
       )}
