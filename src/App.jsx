@@ -108,10 +108,14 @@ function App() {
     const ctx = cleanCanvasRef.current.getContext('2d');
     const imageData = ctx.getImageData(0, 0, 512, 512);
 
+    // Ensure the base path has a trailing slash for correct relative URL construction
+    const basePath = window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/';
+    const modelUrl = window.location.origin + basePath + 'anime-model.onnx';
+
     workerRef.current.postMessage({ 
       imageData: imageData, 
       hints: hints,
-      modelPath: 'anime-model.onnx' // Removed leading slash for GitHub Pages compatibility
+      modelPath: modelUrl 
     });
   };
 
